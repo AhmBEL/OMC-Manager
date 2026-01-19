@@ -62,7 +62,8 @@ const INITIAL_SETTINGS = {
   ],
   stockageTypes: ['Freeze', 'Frais', 'Sec'],
   seuilMargeExcellente: 60,
-  seuilMargeAcceptable: 30
+  seuilMargeAcceptable: 30,
+  coefficientPrixConseille: 2.5
 };
 
 // === COMPOSANTS UTILITAIRES ===
@@ -362,6 +363,12 @@ const ProductForm = ({ product, onSave, onCancel, settings, fournisseurs }) => {
             <input type="number" step="0.01" min="0" required value={form.prixVente}
               onChange={e => setForm({...form, prixVente: parseFloat(e.target.value) || 0})}
               className="w-full px-3 py-2 border border-stone-300 rounded-lg focus:ring-2 focus:ring-emerald-500 text-lg font-semibold" />
+            <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-amber-700">💡 Prix conseillé (×{settings.coefficientPrixConseille})</span>
+                <span className="font-bold text-amber-800">{formatMUR(coutFinal * settings.coefficientPrixConseille)}</span>
+              </div>
+            </div>
           </div>
           <div className="bg-white rounded-lg p-4 space-y-2">
             {form.vatApplicable && (
@@ -1007,9 +1014,22 @@ const SettingsPage = ({ settings, setSettings }) => {
         </table>
       </div>
 
-      {/* Seuils marge */}
+      {/* Seuils marge et coefficient */}
       <div className="bg-white rounded-xl shadow-sm border border-stone-200 p-6">
-        <h2 className="text-lg font-semibold text-stone-800 mb-4">Seuils d'alerte marge</h2>
+        <h2 className="text-lg font-semibold text-stone-800 mb-4">Marges & Prix conseillé</h2>
+        
+        <div className="mb-6 p-4 bg-amber-50 rounded-lg border border-amber-200">
+          <h3 className="font-medium text-amber-800 mb-3">💡 Coefficient prix conseillé</h3>
+          <div className="flex items-center gap-4">
+            <label className="text-stone-600">Prix conseillé = Coût final ×</label>
+            <input type="number" step="0.1" min="1" value={settings.coefficientPrixConseille} 
+              onChange={e => setSettings({...settings, coefficientPrixConseille: parseFloat(e.target.value) || 2})}
+              className="w-20 px-3 py-2 border border-amber-300 rounded-lg text-center font-semibold bg-white" />
+          </div>
+          <p className="mt-2 text-xs text-amber-600">Ce coefficient est utilisé pour suggérer un prix de vente dans le formulaire produit</p>
+        </div>
+
+        <h3 className="font-medium text-stone-700 mb-3">Seuils d'alerte marge</h3>
         <div className="grid grid-cols-2 gap-6">
           <div className="flex items-center gap-4">
             <span className="text-2xl">🟢</span>
