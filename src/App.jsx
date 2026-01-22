@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import AssemblagesPage from './AssemblagesPage';
 
 // === DONNÉES INITIALES ===
 const INITIAL_PRODUCTS = [
@@ -36,6 +37,30 @@ const INITIAL_FOURNISSEURS = [
   {id: 'f1', nom: 'SIP', adresse: '', contact: '', modeCommande: 'Telephone', livraison: true, typeLivraison: 'Delais', typeFournisseur: 'Impot', vat: true, notes: 'Fournisseur principal'},
   {id: 'f2', nom: 'Medley', adresse: '', contact: '', modeCommande: 'Whatsapp', livraison: true, typeLivraison: 'Jours Fix', typeFournisseur: 'Production local', vat: false, notes: ''},
   {id: 'f3', nom: 'France Delice', adresse: '', contact: '', modeCommande: 'Email', livraison: true, typeLivraison: 'Delais', typeFournisseur: 'Impot', vat: true, notes: ''}
+];
+
+// Exemple d'assemblages (plats composés)
+const INITIAL_ASSEMBLAGES = [
+  {
+    id: 'assemblage_1',
+    nom: 'Burger Boeuf Complet',
+    description: 'Steak boeuf, pain burger, mix salade',
+    composants: [
+      {productId: 'sale_1', quantite: 1},  // Steak Boeuf Pré-cuit
+      {productId: 'sale_9', quantite: 1},  // Pain Burger
+      {productId: 'sale_8', quantite: 0.25} // Mix Salade (1/4)
+    ],
+    coutAssemblage: 15,
+    packingType: 'Boite',
+    vatApplicable: true,
+    prixVente: 280,
+    actif: true,
+    isAssemblage: true,
+    coutComposants: 92.35,
+    coutFinal: 140.70,
+    margePct: 0.498,
+    notes: 'Burger signature OMC'
+  }
 ];
 
 const INITIAL_SETTINGS = {
@@ -1315,14 +1340,20 @@ export default function OMCManager() {
     const saved = localStorage.getItem('omc_settings');
     return saved ? JSON.parse(saved) : INITIAL_SETTINGS;
   });
+  const [assemblages, setAssemblages] = useState(() => {
+    const saved = localStorage.getItem('omc_assemblages');
+    return saved ? JSON.parse(saved) : INITIAL_ASSEMBLAGES;
+  });
 
   useEffect(() => { localStorage.setItem('omc_products', JSON.stringify(products)); }, [products]);
   useEffect(() => { localStorage.setItem('omc_fournisseurs', JSON.stringify(fournisseurs)); }, [fournisseurs]);
   useEffect(() => { localStorage.setItem('omc_settings', JSON.stringify(settings)); }, [settings]);
+  useEffect(() => { localStorage.setItem('omc_assemblages', JSON.stringify(assemblages)); }, [assemblages]);
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: '📊' },
     { id: 'catalogue', label: 'Catalogue', icon: '🛒' },
+    { id: 'assemblages', label: 'Assemblages', icon: '🍽️' },
     { id: 'fournisseurs', label: 'Fournisseurs', icon: '🏭' },
     { id: 'parametres', label: 'Paramètres', icon: '⚙️' }
   ];
@@ -1361,13 +1392,14 @@ export default function OMCManager() {
       <main className="max-w-7xl mx-auto px-6 py-8">
         {page === 'dashboard' && <DashboardPage products={products} fournisseurs={fournisseurs} settings={settings} />}
         {page === 'catalogue' && <CataloguePage products={products} setProducts={setProducts} settings={settings} fournisseurs={fournisseurs} />}
+        {page === 'assemblages' && <AssemblagesPage assemblages={assemblages} setAssemblages={setAssemblages} products={products} settings={settings} />}
         {page === 'fournisseurs' && <FournisseursPage fournisseurs={fournisseurs} setFournisseurs={setFournisseurs} products={products} />}
         {page === 'parametres' && <SettingsPage settings={settings} setSettings={setSettings} />}
       </main>
 
       {/* Footer */}
       <footer className="text-center py-4 text-stone-400 text-sm">
-        OMC Manager v1.0 • Données sauvegardées localement
+        OMC Manager v1.1 • Données sauvegardées localement
       </footer>
     </div>
   );
