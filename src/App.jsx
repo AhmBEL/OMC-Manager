@@ -1,5 +1,13 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import AssemblagesPage from './AssemblagesPage';
+import {
+  fetchProduits, saveProduit, deleteProduit,
+  fetchFournisseurs, saveFournisseur, deleteFournisseur,
+  fetchAssemblages, saveAssemblage, deleteAssemblage,
+  fetchSettings, saveSettings,
+  fetchVentes,
+  migrateFromLocalStorage
+} from './supabaseClient';
 
 // === DONNÉES INITIALES ===
 const INITIAL_PRODUCTS = [
@@ -1328,27 +1336,207 @@ const DashboardPage = ({ products, fournisseurs, settings }) => {
 // === APP PRINCIPALE ===
 export default function OMCManager() {
   const [page, setPage] = useState('dashboard');
-  const [products, setProducts] = useState(() => {
-    const saved = localStorage.getItem('omc_products');
-    return saved ? JSON.parse(saved) : INITIAL_PRODUCTS;
-  });
-  const [fournisseurs, setFournisseurs] = useState(() => {
-    const saved = localStorage.getItem('omc_fournisseurs');
-    return saved ? JSON.parse(saved) : INITIAL_FOURNISSEURS;
-  });
-  const [settings, setSettings] = useState(() => {
-    const saved = localStorage.getItem('omc_settings');
-    return saved ? JSON.parse(saved) : INITIAL_SETTINGS;
-  });
-  const [assemblages, setAssemblages] = useState(() => {
-    const saved = localStorage.getItem('omc_assemblages');
-    return saved ? JSON.parse(saved) : INITIAL_ASSEMBLAGES;
-  });
+  const [products, setProducts] = useState([]);
+  const [fournisseurs, setFournisseurs] = useState([]);
+  const [settings, setSettings] = useState(INITIAL_SETTINGS);
+  const [assemblages, setAssemblages] = useState([]);
+  
+  // États Supabase
+  const [loading, setLoading] = useState(true);
+  const [dbConnected, setDbConnected] = useState(false);
+  const [showMigration, setShowMigration] = useState(false);
+  const [migrationResult, setMigrationResult] = useState(null);
+  const [migrating, setMigrating] = useState(false);
 
-  useEffect(() => { localStorage.setItem('omc_products', JSON.stringify(products)); }, [products]);
-  useEffect(() => { localStorage.setItem('omc_fournisseurs', JSON.stringify(fournisseurs)); }, [fournisseurs]);
-  useEffect(() => { localStorage.setItem('omc_settings', JSON.stringify(settings)); }, [settings]);
-  useEffect(() => { localStorage.setItem('omc_assemblages', JSON.stringify(assemblages)); }, [assemblages]);
+  // Charger les données depuis Supabase au démarrage
+  useEffect(() => {
+    const loadData = async () => {
+      setLoading(true);
+      try {
+        const [dbProducts, dbFournisseurs, dbSettings, dbAssemblages] = await Promise.all([
+          fetchProduits(),
+          fetchFournisseurs(),
+          fetchSettings(),
+          fetchAssemblages()
+        ]);
+
+        setDbConnected(true);
+
+        // Si Supabase est vide, vérifier si localStorage a des données à migrer
+        const hasLocalData = localStorage.getItem('omc_products') || 
+                            localStorage.getItem('omc_fournisseurs') ||
+                            localStorage.getItem('omc_assemblages');
+        
+        const dbIsEmpty = dbProducts.length === 0 && dbFournisseurs.length === 0;
+
+        if (dbIsEmpty && hasLocalData) {
+          // Proposer la migration
+          setShowMigration(true);
+          // En attendant, charger depuis localStorage
+          const localProducts = JSON.parse(localStorage.getItem('omc_products') || '[]');
+          const localFournisseurs = JSON.parse(localStorage.getItem('omc_fournisseurs') || '[]');
+          const localSettings = JSON.parse(localStorage.getItem('omc_settings') || 'null');
+          const localAssemblages = JSON.parse(localStorage.getItem('omc_assemblages') || '[]');
+          
+          setProducts(localProducts.length > 0 ? localProducts : INITIAL_PRODUCTS);
+          setFournisseurs(localFournisseurs.length > 0 ? localFournisseurs : INITIAL_FOURNISSEURS);
+          setSettings(localSettings || INITIAL_SETTINGS);
+          setAssemblages(localAssemblages.length > 0 ? localAssemblages : INITIAL_ASSEMBLAGES);
+        } else if (dbIsEmpty) {
+          // Base vide et pas de localStorage, utiliser les données initiales
+          setProducts(INITIAL_PRODUCTS);
+          setFournisseurs(INITIAL_FOURNISSEURS);
+          setSettings(INITIAL_SETTINGS);
+          setAssemblages(INITIAL_ASSEMBLAGES);
+          // Sauvegarder les données initiales dans Supabase
+          for (const p of INITIAL_PRODUCTS) await saveProduit(p);
+          for (const f of INITIAL_FOURNISSEURS) await saveFournisseur(f);
+          for (const a of INITIAL_ASSEMBLAGES) await saveAssemblage(a);
+          await saveSettings(INITIAL_SETTINGS);
+        } else {
+          // Utiliser les données de Supabase
+          setProducts(dbProducts);
+          setFournisseurs(dbFournisseurs);
+          setSettings(dbSettings || INITIAL_SETTINGS);
+          setAssemblages(dbAssemblages);
+        }
+      } catch (error) {
+        console.error('Erreur connexion Supabase:', error);
+        setDbConnected(false);
+        // Fallback sur localStorage
+        const localProducts = JSON.parse(localStorage.getItem('omc_products') || '[]');
+        const localFournisseurs = JSON.parse(localStorage.getItem('omc_fournisseurs') || '[]');
+        const localSettings = JSON.parse(localStorage.getItem('omc_settings') || 'null');
+        const localAssemblages = JSON.parse(localStorage.getItem('omc_assemblages') || '[]');
+        
+        setProducts(localProducts.length > 0 ? localProducts : INITIAL_PRODUCTS);
+        setFournisseurs(localFournisseurs.length > 0 ? localFournisseurs : INITIAL_FOURNISSEURS);
+        setSettings(localSettings || INITIAL_SETTINGS);
+        setAssemblages(localAssemblages.length > 0 ? localAssemblages : INITIAL_ASSEMBLAGES);
+      }
+      setLoading(false);
+    };
+
+    loadData();
+  }, []);
+
+  // Fonctions pour sauvegarder dans Supabase
+  const handleSetProducts = useCallback(async (newProducts) => {
+    const prev = products;
+    setProducts(newProducts);
+    
+    if (dbConnected) {
+      // Déterminer ce qui a changé
+      if (typeof newProducts === 'function') {
+        newProducts = newProducts(prev);
+      }
+      
+      // Sauvegarder tous les produits modifiés
+      for (const product of newProducts) {
+        await saveProduit(product);
+      }
+      
+      // Supprimer les produits qui ne sont plus dans la liste
+      const newIds = new Set(newProducts.map(p => p.id));
+      for (const oldProduct of prev) {
+        if (!newIds.has(oldProduct.id)) {
+          await deleteProduit(oldProduct.id);
+        }
+      }
+    }
+    
+    // Backup localStorage
+    localStorage.setItem('omc_products', JSON.stringify(newProducts));
+  }, [products, dbConnected]);
+
+  const handleSetFournisseurs = useCallback(async (newFournisseurs) => {
+    const prev = fournisseurs;
+    setFournisseurs(newFournisseurs);
+    
+    if (dbConnected) {
+      if (typeof newFournisseurs === 'function') {
+        newFournisseurs = newFournisseurs(prev);
+      }
+      
+      for (const fournisseur of newFournisseurs) {
+        await saveFournisseur(fournisseur);
+      }
+      
+      const newIds = new Set(newFournisseurs.map(f => f.id));
+      for (const oldFournisseur of prev) {
+        if (!newIds.has(oldFournisseur.id)) {
+          await deleteFournisseur(oldFournisseur.id);
+        }
+      }
+    }
+    
+    localStorage.setItem('omc_fournisseurs', JSON.stringify(newFournisseurs));
+  }, [fournisseurs, dbConnected]);
+
+  const handleSetAssemblages = useCallback(async (newAssemblages) => {
+    const prev = assemblages;
+    setAssemblages(newAssemblages);
+    
+    if (dbConnected) {
+      if (typeof newAssemblages === 'function') {
+        newAssemblages = newAssemblages(prev);
+      }
+      
+      for (const assemblage of newAssemblages) {
+        await saveAssemblage(assemblage);
+      }
+      
+      const newIds = new Set(newAssemblages.map(a => a.id));
+      for (const oldAssemblage of prev) {
+        if (!newIds.has(oldAssemblage.id)) {
+          await deleteAssemblage(oldAssemblage.id);
+        }
+      }
+    }
+    
+    localStorage.setItem('omc_assemblages', JSON.stringify(newAssemblages));
+  }, [assemblages, dbConnected]);
+
+  const handleSetSettings = useCallback(async (newSettings) => {
+    setSettings(newSettings);
+    
+    if (dbConnected) {
+      await saveSettings(newSettings);
+    }
+    
+    localStorage.setItem('omc_settings', JSON.stringify(newSettings));
+  }, [dbConnected]);
+
+  // Fonction de migration
+  const handleMigration = async () => {
+    setMigrating(true);
+    try {
+      const result = await migrateFromLocalStorage();
+      setMigrationResult(result);
+      
+      // Recharger les données depuis Supabase
+      const [dbProducts, dbFournisseurs, dbSettings, dbAssemblages] = await Promise.all([
+        fetchProduits(),
+        fetchFournisseurs(),
+        fetchSettings(),
+        fetchAssemblages()
+      ]);
+      
+      setProducts(dbProducts);
+      setFournisseurs(dbFournisseurs);
+      setSettings(dbSettings || INITIAL_SETTINGS);
+      setAssemblages(dbAssemblages);
+      
+      setTimeout(() => {
+        setShowMigration(false);
+        setMigrationResult(null);
+      }, 3000);
+    } catch (error) {
+      console.error('Erreur migration:', error);
+      setMigrationResult({ error: error.message });
+    }
+    setMigrating(false);
+  };
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: '📊' },
@@ -1358,8 +1546,82 @@ export default function OMCManager() {
     { id: 'parametres', label: 'Paramètres', icon: '⚙️' }
   ];
 
+  // Écran de chargement
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-stone-100 via-amber-50/30 to-orange-50/30 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-6xl mb-4 animate-bounce">🍰</div>
+          <h1 className="text-2xl font-bold text-amber-600 mb-2">OMC Manager</h1>
+          <p className="text-stone-500">Connexion à la base de données...</p>
+          <div className="mt-4 w-48 h-2 bg-amber-100 rounded-full overflow-hidden">
+            <div className="h-full bg-amber-500 rounded-full animate-pulse" style={{width: '60%'}}></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-stone-100 via-amber-50/30 to-orange-50/30">
+      {/* Modal de migration */}
+      {showMigration && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm" />
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+              <div className="text-center">
+                <div className="text-5xl mb-4">🔄</div>
+                <h2 className="text-xl font-bold text-stone-800 mb-2">Migration des données</h2>
+                <p className="text-stone-600 mb-4">
+                  Des données ont été trouvées dans votre navigateur. Voulez-vous les transférer vers la base de données Supabase ?
+                </p>
+                
+                <div className="bg-amber-50 rounded-lg p-4 mb-4 text-left">
+                  <p className="text-sm text-amber-800">
+                    <strong>Données trouvées :</strong>
+                  </p>
+                  <ul className="text-sm text-amber-700 mt-2 space-y-1">
+                    <li>✓ {JSON.parse(localStorage.getItem('omc_products') || '[]').length} produits</li>
+                    <li>✓ {JSON.parse(localStorage.getItem('omc_fournisseurs') || '[]').length} fournisseurs</li>
+                    <li>✓ {JSON.parse(localStorage.getItem('omc_assemblages') || '[]').length} assemblages</li>
+                    <li>✓ Paramètres</li>
+                  </ul>
+                </div>
+
+                {migrationResult && (
+                  <div className={`rounded-lg p-4 mb-4 ${migrationResult.error ? 'bg-red-50' : 'bg-emerald-50'}`}>
+                    {migrationResult.error ? (
+                      <p className="text-red-700">❌ Erreur: {migrationResult.error}</p>
+                    ) : (
+                      <div className="text-emerald-700">
+                        <p className="font-semibold">✅ Migration réussie !</p>
+                        <p className="text-sm mt-1">
+                          {migrationResult.produits?.success || 0} produits, {' '}
+                          {migrationResult.fournisseurs?.success || 0} fournisseurs, {' '}
+                          {migrationResult.assemblages?.success || 0} assemblages
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex gap-3">
+                  <button onClick={() => setShowMigration(false)}
+                    className="flex-1 px-4 py-2 border border-stone-300 rounded-lg text-stone-600 hover:bg-stone-50">
+                    Plus tard
+                  </button>
+                  <button onClick={handleMigration} disabled={migrating}
+                    className="flex-1 px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed">
+                    {migrating ? '⏳ Migration...' : '🚀 Migrer maintenant'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="bg-gradient-to-r from-amber-600 via-orange-500 to-amber-500 text-white shadow-lg">
         <div className="max-w-7xl mx-auto px-6 py-4">
@@ -1391,15 +1653,27 @@ export default function OMCManager() {
       {/* Content */}
       <main className="max-w-7xl mx-auto px-6 py-8">
         {page === 'dashboard' && <DashboardPage products={products} fournisseurs={fournisseurs} settings={settings} />}
-        {page === 'catalogue' && <CataloguePage products={products} setProducts={setProducts} settings={settings} fournisseurs={fournisseurs} />}
-        {page === 'assemblages' && <AssemblagesPage assemblages={assemblages} setAssemblages={setAssemblages} products={products} settings={settings} />}
-        {page === 'fournisseurs' && <FournisseursPage fournisseurs={fournisseurs} setFournisseurs={setFournisseurs} products={products} />}
-        {page === 'parametres' && <SettingsPage settings={settings} setSettings={setSettings} />}
+        {page === 'catalogue' && <CataloguePage products={products} setProducts={handleSetProducts} settings={settings} fournisseurs={fournisseurs} />}
+        {page === 'assemblages' && <AssemblagesPage assemblages={assemblages} setAssemblages={handleSetAssemblages} products={products} settings={settings} />}
+        {page === 'fournisseurs' && <FournisseursPage fournisseurs={fournisseurs} setFournisseurs={handleSetFournisseurs} products={products} />}
+        {page === 'parametres' && <SettingsPage settings={settings} setSettings={handleSetSettings} />}
       </main>
 
       {/* Footer */}
-      <footer className="text-center py-4 text-stone-400 text-sm">
-        OMC Manager v1.1 • Données sauvegardées localement
+      <footer className="text-center py-4 text-stone-400 text-sm flex items-center justify-center gap-2">
+        <span>OMC Manager v2.0</span>
+        <span>•</span>
+        {dbConnected ? (
+          <span className="flex items-center gap-1 text-emerald-500">
+            <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+            Connecté à Supabase
+          </span>
+        ) : (
+          <span className="flex items-center gap-1 text-amber-500">
+            <span className="w-2 h-2 bg-amber-500 rounded-full"></span>
+            Mode hors-ligne (localStorage)
+          </span>
+        )}
       </footer>
     </div>
   );
