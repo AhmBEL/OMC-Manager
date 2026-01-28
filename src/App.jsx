@@ -1,11 +1,16 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import AssemblagesPage from './AssemblagesPage';
+import FormulesPage from './FormulesPage';
+import DashboardSante from './DashboardSante';
+import DashboardPerformance from './DashboardPerformance';
 import {
   fetchProduits, saveProduit, deleteProduit,
   fetchFournisseurs, saveFournisseur, deleteFournisseur,
   fetchAssemblages, saveAssemblage, deleteAssemblage,
   fetchSettings, saveSettings,
   fetchVentes,
+  fetchFormules, saveFormule, deleteFormule,
+  fetchCategoriesAssemblages, saveCategorieAssemblage, deleteCategorieAssemblage,
   migrateFromLocalStorage
 } from './supabaseClient';
 
@@ -96,7 +101,9 @@ const INITIAL_SETTINGS = {
   stockageTypes: ['Freeze', 'Frais', 'Sec'],
   seuilMargeExcellente: 60,
   seuilMargeAcceptable: 30,
-  coefficientPrixConseille: 2.5
+  coefficientPrixConseille: 2.5,
+  passwordAdmin: 'admin123',
+  passwordManager: 'manager123'
 };
 
 // === COMPOSANTS UTILITAIRES ===
@@ -1546,6 +1553,85 @@ export default function OMCManager() {
     { id: 'parametres', label: 'Paramètres', icon: '⚙️' }
   ];
 
+  // États pour la nouvelle navigation
+  const [openMenu, setOpenMenu] = useState(null);
+  const [viewMode, setViewMode] = useState('employe'); // 'employe', 'manager', 'admin'
+  const [showPasswordModal, setShowPasswordModal] = useState(null); // null, 'manager', 'admin'
+  const [passwordInput, setPasswordInput] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+
+  // États pour les nouvelles données
+  const [formules, setFormules] = useState([]);
+  const [categoriesAssemblages, setCategoriesAssemblages] = useState([]);
+  const [ventes, setVentes] = useState([]);
+
+  // Charger formules au démarrage (ajouter au useEffect existant)
+  useEffect(() => {
+    const loadExtraData = async () => {
+      if (dbConnected) {
+        try {
+          const [dbFormules, dbCategories] = await Promise.all([
+            fetchFormules(),
+            fetchCategoriesAssemblages()
+          ]);
+          setFormules(dbFormules || []);
+          setCategoriesAssemblages(dbCategories || []);
+        } catch (e) {
+          console.log('Chargement données supplémentaires:', e);
+        }
+      }
+    };
+    if (!loading && dbConnected) {
+      loadExtraData();
+    }
+  }, [loading, dbConnected]);
+
+  // Handler pour formules
+  const handleSetFormules = useCallback(async (newFormules) => {
+    const prev = formules;
+    setFormules(newFormules);
+    
+    if (dbConnected) {
+      if (typeof newFormules === 'function') {
+        newFormules = newFormules(prev);
+      }
+      for (const formule of newFormules) {
+        await saveFormule(formule);
+      }
+      const newIds = new Set(newFormules.map(f => f.id));
+      for (const oldFormule of prev) {
+        if (!newIds.has(oldFormule.id)) {
+          await deleteFormule(oldFormule.id);
+        }
+      }
+    }
+    localStorage.setItem('omc_formules', JSON.stringify(newFormules));
+  }, [formules, dbConnected]);
+
+  // Vérification du mot de passe
+  const checkPassword = (mode) => {
+    const passwords = {
+      admin: settings.passwordAdmin || 'admin123',
+      manager: settings.passwordManager || 'manager123'
+    };
+    
+    if (passwordInput === passwords[mode]) {
+      setViewMode(mode);
+      setShowPasswordModal(null);
+      setPasswordInput('');
+      setPasswordError('');
+    } else {
+      setPasswordError('Mot de passe incorrect');
+    }
+  };
+
+  // Fermer les menus quand on clique ailleurs
+  useEffect(() => {
+    const handleClickOutside = () => setOpenMenu(null);
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
+
   // Écran de chargement
   if (loading) {
     return (
@@ -1622,7 +1708,46 @@ export default function OMCManager() {
         </div>
       )}
 
-      {/* Header */}
+      {/* Modal mot de passe */}
+      {showPasswordModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm" onClick={() => setShowPasswordModal(null)} />
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+              <div className="text-center">
+                <div className="text-4xl mb-3">🔐</div>
+                <h2 className="text-lg font-bold text-stone-800 mb-4">
+                  Accès {showPasswordModal === 'admin' ? 'Administrateur' : 'Manager'}
+                </h2>
+                <input
+                  type="password"
+                  value={passwordInput}
+                  onChange={e => { setPasswordInput(e.target.value); setPasswordError(''); }}
+                  onKeyPress={e => e.key === 'Enter' && checkPassword(showPasswordModal)}
+                  placeholder="Mot de passe"
+                  className="w-full px-4 py-3 border border-stone-300 rounded-lg text-center text-lg mb-2"
+                  autoFocus
+                />
+                {passwordError && (
+                  <p className="text-red-500 text-sm mb-3">{passwordError}</p>
+                )}
+                <div className="flex gap-3 mt-4">
+                  <button onClick={() => { setShowPasswordModal(null); setPasswordInput(''); setPasswordError(''); }}
+                    className="flex-1 px-4 py-2 border border-stone-300 rounded-lg text-stone-600 hover:bg-stone-50">
+                    Annuler
+                  </button>
+                  <button onClick={() => checkPassword(showPasswordModal)}
+                    className="flex-1 px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600">
+                    Valider
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Header avec nouvelle navigation */}
       <header className="bg-gradient-to-r from-amber-600 via-orange-500 to-amber-500 text-white shadow-lg">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
@@ -1633,18 +1758,148 @@ export default function OMCManager() {
                 <p className="text-amber-100 text-xs">Gestion Produits & Fournisseurs</p>
               </div>
             </div>
-            <nav className="flex gap-1">
-              {navItems.map(item => (
-                <button key={item.id} onClick={() => setPage(item.id)}
+            
+            {/* Navigation avec menus déroulants */}
+            <nav className="flex items-center gap-1">
+              {/* Menu Dashboard */}
+              <div className="relative">
+                <button 
+                  onClick={(e) => { e.stopPropagation(); setOpenMenu(openMenu === 'dashboard' ? null : 'dashboard'); }}
                   className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${
-                    page === item.id 
+                    ['dashboard-sante', 'dashboard-perf'].includes(page)
                       ? 'bg-white/20 text-white font-medium' 
                       : 'text-amber-100 hover:bg-white/10'
                   }`}>
-                  <span>{item.icon}</span>
-                  <span className="hidden md:inline">{item.label}</span>
+                  <span>📊</span>
+                  <span className="hidden md:inline">Dashboard</span>
+                  <span className="text-xs">▼</span>
                 </button>
-              ))}
+                {openMenu === 'dashboard' && (
+                  <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-xl py-2 min-w-[180px] z-50">
+                    <button onClick={() => { setPage('dashboard-sante'); setOpenMenu(null); }}
+                      className="w-full px-4 py-2 text-left text-stone-700 hover:bg-amber-50 flex items-center gap-2">
+                      <span>🏥</span> Santé BDD
+                    </button>
+                    <button onClick={() => { setPage('dashboard-perf'); setOpenMenu(null); }}
+                      className="w-full px-4 py-2 text-left text-stone-700 hover:bg-amber-50 flex items-center gap-2">
+                      <span>📈</span> Performance
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Menu Produits */}
+              <div className="relative">
+                <button 
+                  onClick={(e) => { e.stopPropagation(); setOpenMenu(openMenu === 'produits' ? null : 'produits'); }}
+                  className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${
+                    ['catalogue', 'fournisseurs', 'assemblages', 'formules'].includes(page)
+                      ? 'bg-white/20 text-white font-medium' 
+                      : 'text-amber-100 hover:bg-white/10'
+                  }`}>
+                  <span>📦</span>
+                  <span className="hidden md:inline">Produits</span>
+                  <span className="text-xs">▼</span>
+                </button>
+                {openMenu === 'produits' && (
+                  <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-xl py-2 min-w-[180px] z-50">
+                    <button onClick={() => { setPage('catalogue'); setOpenMenu(null); }}
+                      className="w-full px-4 py-2 text-left text-stone-700 hover:bg-amber-50 flex items-center gap-2">
+                      <span>🛒</span> Catalogue
+                    </button>
+                    {viewMode === 'admin' && (
+                      <button onClick={() => { setPage('fournisseurs'); setOpenMenu(null); }}
+                        className="w-full px-4 py-2 text-left text-stone-700 hover:bg-amber-50 flex items-center gap-2">
+                        <span>🏭</span> Fournisseurs
+                      </button>
+                    )}
+                    <button onClick={() => { setPage('assemblages'); setOpenMenu(null); }}
+                      className="w-full px-4 py-2 text-left text-stone-700 hover:bg-amber-50 flex items-center gap-2">
+                      <span>🍔</span> Assemblages
+                    </button>
+                    <button onClick={() => { setPage('formules'); setOpenMenu(null); }}
+                      className="w-full px-4 py-2 text-left text-stone-700 hover:bg-amber-50 flex items-center gap-2">
+                      <span>🍱</span> Formules
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Menu Procédures (Phase 2) */}
+              <div className="relative">
+                <button 
+                  onClick={(e) => { e.stopPropagation(); setOpenMenu(openMenu === 'procedures' ? null : 'procedures'); }}
+                  className="px-4 py-2 rounded-lg flex items-center gap-2 text-amber-100 hover:bg-white/10 transition-all">
+                  <span>📋</span>
+                  <span className="hidden md:inline">Procédures</span>
+                  <span className="text-xs">▼</span>
+                </button>
+                {openMenu === 'procedures' && (
+                  <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-xl py-2 min-w-[180px] z-50">
+                    <div className="px-4 py-3 text-center">
+                      <span className="text-2xl">🚧</span>
+                      <p className="text-stone-500 text-sm mt-1">Bientôt disponible</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Paramètres (admin uniquement) */}
+              {viewMode === 'admin' && (
+                <button onClick={() => setPage('parametres')}
+                  className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${
+                    page === 'parametres'
+                      ? 'bg-white/20 text-white font-medium' 
+                      : 'text-amber-100 hover:bg-white/10'
+                  }`}>
+                  <span>⚙️</span>
+                  <span className="hidden md:inline">Paramètres</span>
+                </button>
+              )}
+
+              {/* Sélecteur de vue */}
+              <div className="relative ml-2 border-l border-amber-400/30 pl-2">
+                <button 
+                  onClick={(e) => { e.stopPropagation(); setOpenMenu(openMenu === 'view' ? null : 'view'); }}
+                  className="px-3 py-2 rounded-lg flex items-center gap-2 bg-white/10 hover:bg-white/20 transition-all">
+                  <span>{viewMode === 'admin' ? '🔓' : viewMode === 'manager' ? '👔' : '👤'}</span>
+                  <span className="hidden md:inline text-sm">
+                    {viewMode === 'admin' ? 'Admin' : viewMode === 'manager' ? 'Manager' : 'Employé'}
+                  </span>
+                  <span className="text-xs">▼</span>
+                </button>
+                {openMenu === 'view' && (
+                  <div className="absolute top-full right-0 mt-1 bg-white rounded-lg shadow-xl py-2 min-w-[160px] z-50">
+                    <button onClick={() => { setViewMode('employe'); setOpenMenu(null); }}
+                      className={`w-full px-4 py-2 text-left flex items-center gap-2 ${viewMode === 'employe' ? 'bg-amber-50 text-amber-700' : 'text-stone-700 hover:bg-stone-50'}`}>
+                      <span>👤</span> Employé
+                    </button>
+                    <button onClick={() => { 
+                      if (viewMode === 'manager' || viewMode === 'admin') {
+                        setViewMode('manager'); 
+                        setOpenMenu(null);
+                      } else {
+                        setShowPasswordModal('manager'); 
+                        setOpenMenu(null);
+                      }
+                    }}
+                      className={`w-full px-4 py-2 text-left flex items-center gap-2 ${viewMode === 'manager' ? 'bg-amber-50 text-amber-700' : 'text-stone-700 hover:bg-stone-50'}`}>
+                      <span>👔</span> Manager
+                    </button>
+                    <button onClick={() => { 
+                      if (viewMode === 'admin') {
+                        setOpenMenu(null);
+                      } else {
+                        setShowPasswordModal('admin'); 
+                        setOpenMenu(null);
+                      }
+                    }}
+                      className={`w-full px-4 py-2 text-left flex items-center gap-2 ${viewMode === 'admin' ? 'bg-amber-50 text-amber-700' : 'text-stone-700 hover:bg-stone-50'}`}>
+                      <span>🔓</span> Admin
+                    </button>
+                  </div>
+                )}
+              </div>
             </nav>
           </div>
         </div>
@@ -1652,16 +1907,31 @@ export default function OMCManager() {
 
       {/* Content */}
       <main className="max-w-7xl mx-auto px-6 py-8">
-        {page === 'dashboard' && <DashboardPage products={products} fournisseurs={fournisseurs} settings={settings} />}
-        {page === 'catalogue' && <CataloguePage products={products} setProducts={handleSetProducts} settings={settings} fournisseurs={fournisseurs} />}
-        {page === 'assemblages' && <AssemblagesPage assemblages={assemblages} setAssemblages={handleSetAssemblages} products={products} settings={settings} />}
-        {page === 'fournisseurs' && <FournisseursPage fournisseurs={fournisseurs} setFournisseurs={handleSetFournisseurs} products={products} />}
-        {page === 'parametres' && <SettingsPage settings={settings} setSettings={handleSetSettings} />}
+        {page === 'dashboard-sante' && <DashboardSante products={products} assemblages={assemblages} formules={formules} fournisseurs={fournisseurs} settings={settings} viewMode={viewMode} />}
+        {page === 'dashboard-perf' && <DashboardPerformance products={products} assemblages={assemblages} formules={formules} ventes={ventes} settings={settings} viewMode={viewMode} />}
+        {page === 'catalogue' && <CataloguePage products={products} setProducts={handleSetProducts} settings={settings} fournisseurs={fournisseurs} viewMode={viewMode} />}
+        {page === 'assemblages' && <AssemblagesPage assemblages={assemblages} setAssemblages={handleSetAssemblages} products={products} settings={settings} viewMode={viewMode} />}
+        {page === 'formules' && <FormulesPage formules={formules} setFormules={handleSetFormules} products={products} assemblages={assemblages} settings={settings} viewMode={viewMode} />}
+        {page === 'fournisseurs' && viewMode === 'admin' && <FournisseursPage fournisseurs={fournisseurs} setFournisseurs={handleSetFournisseurs} products={products} />}
+        {page === 'parametres' && viewMode === 'admin' && <SettingsPage settings={settings} setSettings={handleSetSettings} />}
+        
+        {/* Page par défaut si accès refusé */}
+        {(page === 'fournisseurs' || page === 'parametres') && viewMode !== 'admin' && (
+          <div className="text-center py-16">
+            <span className="text-6xl">🔒</span>
+            <h2 className="text-xl font-bold text-stone-700 mt-4">Accès restreint</h2>
+            <p className="text-stone-500 mt-2">Cette section nécessite un accès administrateur.</p>
+            <button onClick={() => setShowPasswordModal('admin')}
+              className="mt-4 px-6 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600">
+              🔓 Entrer le mot de passe admin
+            </button>
+          </div>
+        )}
       </main>
 
       {/* Footer */}
       <footer className="text-center py-4 text-stone-400 text-sm flex items-center justify-center gap-2">
-        <span>OMC Manager v2.0</span>
+        <span>OMC Manager v3.0</span>
         <span>•</span>
         {dbConnected ? (
           <span className="flex items-center gap-1 text-emerald-500">
@@ -1671,9 +1941,13 @@ export default function OMCManager() {
         ) : (
           <span className="flex items-center gap-1 text-amber-500">
             <span className="w-2 h-2 bg-amber-500 rounded-full"></span>
-            Mode hors-ligne (localStorage)
+            Mode hors-ligne
           </span>
         )}
+        <span>•</span>
+        <span className={`${viewMode === 'admin' ? 'text-emerald-500' : viewMode === 'manager' ? 'text-blue-500' : 'text-stone-400'}`}>
+          {viewMode === 'admin' ? '🔓 Admin' : viewMode === 'manager' ? '👔 Manager' : '👤 Employé'}
+        </span>
       </footer>
     </div>
   );

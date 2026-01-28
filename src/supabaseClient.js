@@ -311,6 +311,112 @@ export const saveVente = async (vente) => {
   return { data, error };
 };
 
+// --- FORMULES ---
+export const fetchFormules = async () => {
+  const { data, error } = await supabase
+    .from('formules')
+    .select('*')
+    .order('created_at', { ascending: true });
+  
+  if (error) {
+    console.error('Erreur fetch formules:', error);
+    return [];
+  }
+  
+  return data.map(f => ({
+    id: f.id,
+    nom: f.nom,
+    description: f.description,
+    composants: f.composants || [],
+    prixComposants: Number(f.prix_composants),
+    prixVente: Number(f.prix_vente),
+    economiePct: Number(f.economie_pct),
+    actif: f.actif,
+    loyverseId: f.loyverse_id,
+    syncStatus: f.sync_status,
+    notes: f.notes
+  }));
+};
+
+export const saveFormule = async (formule) => {
+  const { data, error } = await supabase
+    .from('formules')
+    .upsert({
+      id: formule.id,
+      nom: formule.nom,
+      description: formule.description,
+      composants: formule.composants,
+      prix_composants: formule.prixComposants,
+      prix_vente: formule.prixVente,
+      economie_pct: formule.economiePct,
+      actif: formule.actif,
+      loyverse_id: formule.loyverseId,
+      sync_status: formule.syncStatus || 'pending',
+      notes: formule.notes,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'id' });
+  
+  if (error) console.error('Erreur save formule:', error);
+  return { data, error };
+};
+
+export const deleteFormule = async (id) => {
+  const { error } = await supabase
+    .from('formules')
+    .delete()
+    .eq('id', id);
+  
+  if (error) console.error('Erreur delete formule:', error);
+  return { error };
+};
+
+// --- CATEGORIES ASSEMBLAGES ---
+export const fetchCategoriesAssemblages = async () => {
+  const { data, error } = await supabase
+    .from('categories_assemblages')
+    .select('*')
+    .order('ordre', { ascending: true });
+  
+  if (error) {
+    console.error('Erreur fetch categories assemblages:', error);
+    return [];
+  }
+  
+  return data.map(c => ({
+    id: c.id,
+    nom: c.nom,
+    description: c.description,
+    couleur: c.couleur,
+    ordre: c.ordre
+  }));
+};
+
+export const saveCategorieAssemblage = async (categorie) => {
+  const { data, error } = await supabase
+    .from('categories_assemblages')
+    .upsert({
+      id: categorie.id,
+      nom: categorie.nom,
+      description: categorie.description,
+      couleur: categorie.couleur,
+      ordre: categorie.ordre,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'id' });
+  
+  if (error) console.error('Erreur save categorie assemblage:', error);
+  return { data, error };
+};
+
+export const deleteCategorieAssemblage = async (id) => {
+  const { error } = await supabase
+    .from('categories_assemblages')
+    .delete()
+    .eq('id', id);
+  
+  if (error) console.error('Erreur delete categorie assemblage:', error);
+  return { error };
+};
+
 // --- MIGRATION DEPUIS LOCALSTORAGE ---
 export const migrateFromLocalStorage = async () => {
   const results = {
