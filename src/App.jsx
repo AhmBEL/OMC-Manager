@@ -3,6 +3,7 @@ import AssemblagesPage from './AssemblagesPage';
 import FormulesPage from './FormulesPage';
 import DashboardSante from './DashboardSante';
 import DashboardPerformance from './DashboardPerformance';
+import HomePage from './HomePage';
 import {
   fetchProduits, saveProduit, deleteProduit,
   fetchFournisseurs, saveFournisseur, deleteFournisseur,
@@ -1342,7 +1343,7 @@ const DashboardPage = ({ products, fournisseurs, settings }) => {
 
 // === APP PRINCIPALE ===
 export default function OMCManager() {
-  const [page, setPage] = useState('dashboard');
+  const [page, setPage] = useState('home');
   const [products, setProducts] = useState([]);
   const [fournisseurs, setFournisseurs] = useState([]);
   const [settings, setSettings] = useState(INITIAL_SETTINGS);
@@ -1751,16 +1752,28 @@ export default function OMCManager() {
       <header className="bg-gradient-to-r from-amber-600 via-orange-500 to-amber-500 text-white shadow-lg">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+            <button onClick={() => setPage('home')} className="flex items-center gap-3 hover:opacity-90 transition-opacity">
               <span className="text-3xl">🍰</span>
-              <div>
+              <div className="text-left">
                 <h1 className="text-xl font-bold">Oh My Cake</h1>
                 <p className="text-amber-100 text-xs">Gestion Produits & Fournisseurs</p>
               </div>
-            </div>
+            </button>
             
             {/* Navigation avec menus déroulants */}
             <nav className="flex items-center gap-1">
+              {/* Bouton Accueil */}
+              <button 
+                onClick={() => setPage('home')}
+                className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${
+                  page === 'home'
+                    ? 'bg-white/20 text-white font-medium' 
+                    : 'text-amber-100 hover:bg-white/10'
+                }`}>
+                <span>🏠</span>
+                <span className="hidden md:inline">Accueil</span>
+              </button>
+
               {/* Menu Dashboard */}
               <div className="relative">
                 <button 
@@ -1907,6 +1920,19 @@ export default function OMCManager() {
 
       {/* Content */}
       <main className="max-w-7xl mx-auto px-6 py-8">
+        {page === 'home' && <HomePage 
+          products={products} 
+          assemblages={assemblages} 
+          formules={formules} 
+          fournisseurs={fournisseurs} 
+          settings={settings} 
+          viewMode={viewMode}
+          setViewMode={setViewMode}
+          setShowPasswordModal={setShowPasswordModal}
+          setPage={setPage}
+          dbConnected={dbConnected}
+          lastSync={null}
+        />}
         {page === 'dashboard-sante' && <DashboardSante products={products} assemblages={assemblages} formules={formules} fournisseurs={fournisseurs} settings={settings} viewMode={viewMode} />}
         {page === 'dashboard-perf' && <DashboardPerformance products={products} assemblages={assemblages} formules={formules} ventes={ventes} settings={settings} viewMode={viewMode} />}
         {page === 'catalogue' && <CataloguePage products={products} setProducts={handleSetProducts} settings={settings} fournisseurs={fournisseurs} viewMode={viewMode} />}
