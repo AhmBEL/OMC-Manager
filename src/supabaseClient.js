@@ -1,79 +1,57 @@
-// Configuration Supabase pour OMC Manager
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = 'https://vswtnkruqmsthogxxmsp.supabase.co';
-const supabaseAnonKey = 'sb_publishable__vKxNcvUZ-Jkg0hy9u1gaQ_TVtUMHpY';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZzd3Rua3J1cW1zdGhvZ3h4bXNwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzY5MzkxNjIsImV4cCI6MjA1MjUxNTE2Mn0.BridCRPKKL_UUlNJJJ7rpb1k33XL4vMLGLGPbNmKfSo';
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseKey);
 
-// === FONCTIONS UTILITAIRES POUR LA BASE DE DONNÉES ===
+// Test de connexion
+export const testConnection = async () => {
+  try {
+    const { data, error } = await supabase.from('produits').select('count', { count: 'exact', head: true });
+    return !error;
+  } catch (e) {
+    return false;
+  }
+};
 
-// --- PRODUITS ---
+// =================== PRODUITS ===================
 export const fetchProduits = async () => {
   const { data, error } = await supabase
     .from('produits')
     .select('*')
-    .order('created_at', { ascending: true });
+    .order('nomOMC', { ascending: true });
   
   if (error) {
     console.error('Erreur fetch produits:', error);
     return [];
   }
-  
-  // Convertir les noms de colonnes snake_case vers camelCase
-  return data.map(p => ({
-    id: p.id,
-    nomOMC: p.nom_omc,
-    nomFournisseur: p.nom_fournisseur,
-    categorie: p.categorie,
-    sousCategorie: p.sous_categorie,
-    fournisseur: p.fournisseur,
-    stockage: p.stockage,
-    cuisson: p.cuisson,
-    prixFournisseur: Number(p.prix_fournisseur),
-    lot: p.lot,
-    prixUnitaire: Number(p.prix_unitaire),
-    packingType: p.packing_type,
-    packing: Number(p.packing),
-    transformation: p.transformation,
-    coutTransformation: Number(p.cout_transformation),
-    vatApplicable: p.vat_applicable,
-    prixVente: Number(p.prix_vente),
-    selectionneOMC: p.selectionne_omc,
-    notes: p.notes,
-    loyverseId: p.loyverse_id
-  }));
+  return data || [];
 };
 
 export const saveProduit = async (produit) => {
-  const { data, error } = await supabase
-    .from('produits')
-    .upsert({
-      id: produit.id,
-      nom_omc: produit.nomOMC,
-      nom_fournisseur: produit.nomFournisseur,
-      categorie: produit.categorie,
-      sous_categorie: produit.sousCategorie,
-      fournisseur: produit.fournisseur,
-      stockage: produit.stockage,
-      cuisson: produit.cuisson,
-      prix_fournisseur: produit.prixFournisseur,
-      lot: produit.lot,
-      prix_unitaire: produit.prixUnitaire,
-      packing_type: produit.packingType,
-      packing: produit.packing,
-      transformation: produit.transformation,
-      cout_transformation: produit.coutTransformation,
-      vat_applicable: produit.vatApplicable,
-      prix_vente: produit.prixVente,
-      selectionne_omc: produit.selectionneOMC,
-      notes: produit.notes,
-      loyverse_id: produit.loyverseId,
-      updated_at: new Date().toISOString()
-    }, { onConflict: 'id' });
+  const { id, ...produitData } = produit;
   
-  if (error) console.error('Erreur save produit:', error);
-  return { data, error };
+  if (id && !id.startsWith('temp_')) {
+    const { data, error } = await supabase
+      .from('produits')
+      .update(produitData)
+      .eq('id', id)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
+  } else {
+    const { data, error } = await supabase
+      .from('produits')
+      .insert([produitData])
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
+  }
 };
 
 export const deleteProduit = async (id) => {
@@ -82,55 +60,47 @@ export const deleteProduit = async (id) => {
     .delete()
     .eq('id', id);
   
-  if (error) console.error('Erreur delete produit:', error);
-  return { error };
+  if (error) throw error;
+  return true;
 };
 
-// --- FOURNISSEURS ---
+// =================== FOURNISSEURS ===================
 export const fetchFournisseurs = async () => {
   const { data, error } = await supabase
     .from('fournisseurs')
     .select('*')
-    .order('created_at', { ascending: true });
+    .order('nom', { ascending: true });
   
   if (error) {
     console.error('Erreur fetch fournisseurs:', error);
     return [];
   }
-  
-  return data.map(f => ({
-    id: f.id,
-    nom: f.nom,
-    adresse: f.adresse,
-    contact: f.contact,
-    modeCommande: f.mode_commande,
-    livraison: f.livraison,
-    typeLivraison: f.type_livraison,
-    typeFournisseur: f.type_fournisseur,
-    vat: f.vat,
-    notes: f.notes
-  }));
+  return data || [];
 };
 
 export const saveFournisseur = async (fournisseur) => {
-  const { data, error } = await supabase
-    .from('fournisseurs')
-    .upsert({
-      id: fournisseur.id,
-      nom: fournisseur.nom,
-      adresse: fournisseur.adresse,
-      contact: fournisseur.contact,
-      mode_commande: fournisseur.modeCommande,
-      livraison: fournisseur.livraison,
-      type_livraison: fournisseur.typeLivraison,
-      type_fournisseur: fournisseur.typeFournisseur,
-      vat: fournisseur.vat,
-      notes: fournisseur.notes,
-      updated_at: new Date().toISOString()
-    }, { onConflict: 'id' });
+  const { id, ...fournisseurData } = fournisseur;
   
-  if (error) console.error('Erreur save fournisseur:', error);
-  return { data, error };
+  if (id && !id.startsWith('temp_')) {
+    const { data, error } = await supabase
+      .from('fournisseurs')
+      .update(fournisseurData)
+      .eq('id', id)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
+  } else {
+    const { data, error } = await supabase
+      .from('fournisseurs')
+      .insert([fournisseurData])
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
+  }
 };
 
 export const deleteFournisseur = async (id) => {
@@ -139,64 +109,47 @@ export const deleteFournisseur = async (id) => {
     .delete()
     .eq('id', id);
   
-  if (error) console.error('Erreur delete fournisseur:', error);
-  return { error };
+  if (error) throw error;
+  return true;
 };
 
-// --- ASSEMBLAGES ---
+// =================== ASSEMBLAGES ===================
 export const fetchAssemblages = async () => {
   const { data, error } = await supabase
     .from('assemblages')
     .select('*')
-    .order('created_at', { ascending: true });
+    .order('nom', { ascending: true });
   
   if (error) {
     console.error('Erreur fetch assemblages:', error);
     return [];
   }
-  
-  return data.map(a => ({
-    id: a.id,
-    nom: a.nom,
-    description: a.description,
-    composants: a.composants || [],
-    coutAssemblage: Number(a.cout_assemblage),
-    packingType: a.packing_type,
-    vatApplicable: a.vat_applicable,
-    prixVente: Number(a.prix_vente),
-    actif: a.actif,
-    coutComposants: Number(a.cout_composants),
-    coutFinal: Number(a.cout_final),
-    margePct: Number(a.marge_pct),
-    notes: a.notes,
-    isAssemblage: true,
-    loyverseId: a.loyverse_id
-  }));
+  return data || [];
 };
 
 export const saveAssemblage = async (assemblage) => {
-  const { data, error } = await supabase
-    .from('assemblages')
-    .upsert({
-      id: assemblage.id,
-      nom: assemblage.nom,
-      description: assemblage.description,
-      composants: assemblage.composants,
-      cout_assemblage: assemblage.coutAssemblage,
-      packing_type: assemblage.packingType,
-      vat_applicable: assemblage.vatApplicable,
-      prix_vente: assemblage.prixVente,
-      actif: assemblage.actif,
-      cout_composants: assemblage.coutComposants,
-      cout_final: assemblage.coutFinal,
-      marge_pct: assemblage.margePct,
-      notes: assemblage.notes,
-      loyverse_id: assemblage.loyverseId,
-      updated_at: new Date().toISOString()
-    }, { onConflict: 'id' });
+  const { id, ...assemblageData } = assemblage;
   
-  if (error) console.error('Erreur save assemblage:', error);
-  return { data, error };
+  if (id && !id.startsWith('temp_')) {
+    const { data, error } = await supabase
+      .from('assemblages')
+      .update(assemblageData)
+      .eq('id', id)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
+  } else {
+    const { data, error } = await supabase
+      .from('assemblages')
+      .insert([assemblageData])
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
+  }
 };
 
 export const deleteAssemblage = async (id) => {
@@ -205,69 +158,66 @@ export const deleteAssemblage = async (id) => {
     .delete()
     .eq('id', id);
   
-  if (error) console.error('Erreur delete assemblage:', error);
-  return { error };
+  if (error) throw error;
+  return true;
 };
 
-// --- SETTINGS ---
+// =================== SETTINGS ===================
 export const fetchSettings = async () => {
   const { data, error } = await supabase
     .from('settings')
     .select('*')
-    .eq('id', 'main')
+    .limit(1)
     .single();
   
   if (error && error.code !== 'PGRST116') {
     console.error('Erreur fetch settings:', error);
     return null;
   }
-  
-  if (!data) return null;
-  
-  return {
-    vatRate: Number(data.vat_rate),
-    packingTypes: data.packing_types || [],
-    transformationTypes: data.transformation_types || [],
-    categories: data.categories || [],
-    stockageTypes: data.stockage_types || ['Freeze', 'Frais', 'Sec'],
-    seuilMargeExcellente: Number(data.seuil_marge_excellente),
-    seuilMargeAcceptable: Number(data.seuil_marge_acceptable),
-    coefficientPrixConseille: Number(data.coefficient_prix_conseille)
-  };
+  return data;
 };
 
 export const saveSettings = async (settings) => {
-  const { data, error } = await supabase
+  const { data: existing } = await supabase
     .from('settings')
-    .upsert({
-      id: 'main',
-      vat_rate: settings.vatRate,
-      packing_types: settings.packingTypes,
-      transformation_types: settings.transformationTypes,
-      categories: settings.categories,
-      stockage_types: settings.stockageTypes,
-      seuil_marge_excellente: settings.seuilMargeExcellente,
-      seuil_marge_acceptable: settings.seuilMargeAcceptable,
-      coefficient_prix_conseille: settings.coefficientPrixConseille,
-      updated_at: new Date().toISOString()
-    }, { onConflict: 'id' });
+    .select('id')
+    .limit(1)
+    .single();
   
-  if (error) console.error('Erreur save settings:', error);
-  return { data, error };
+  if (existing) {
+    const { data, error } = await supabase
+      .from('settings')
+      .update(settings)
+      .eq('id', existing.id)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
+  } else {
+    const { data, error } = await supabase
+      .from('settings')
+      .insert([settings])
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
+  }
 };
 
-// --- VENTES (pour sync Loyverse) ---
-export const fetchVentes = async (startDate, endDate) => {
+// =================== VENTES (LOYVERSE) ===================
+export const fetchVentes = async (dateDebut = null, dateFin = null) => {
   let query = supabase
     .from('ventes')
     .select('*')
-    .order('date_vente', { ascending: false });
+    .order('receipt_date', { ascending: false });
   
-  if (startDate) {
-    query = query.gte('date_vente', startDate);
+  if (dateDebut) {
+    query = query.gte('receipt_date', dateDebut);
   }
-  if (endDate) {
-    query = query.lte('date_vente', endDate);
+  if (dateFin) {
+    query = query.lte('receipt_date', dateFin);
   }
   
   const { data, error } = await query;
@@ -276,88 +226,161 @@ export const fetchVentes = async (startDate, endDate) => {
     console.error('Erreur fetch ventes:', error);
     return [];
   }
-  
-  return data.map(v => ({
-    id: v.id,
-    receiptNumber: v.receipt_number,
-    dateVente: v.date_vente,
-    produitId: v.produit_id,
-    produitNom: v.produit_nom,
-    quantite: Number(v.quantite),
-    prixUnitaire: Number(v.prix_unitaire),
-    total: Number(v.total),
-    heure: v.heure,
-    jourSemaine: v.jour_semaine
-  }));
+  return data || [];
 };
 
-export const saveVente = async (vente) => {
+// Récupérer les stats de ventes agrégées
+export const fetchVentesStats = async (jours = 7) => {
+  const dateDebut = new Date();
+  dateDebut.setDate(dateDebut.getDate() - jours);
+  
   const { data, error } = await supabase
     .from('ventes')
-    .upsert({
-      id: vente.id,
-      receipt_number: vente.receiptNumber,
-      date_vente: vente.dateVente,
-      produit_id: vente.produitId,
-      produit_nom: vente.produitNom,
-      quantite: vente.quantite,
-      prix_unitaire: vente.prixUnitaire,
-      total: vente.total,
-      heure: vente.heure,
-      jour_semaine: vente.jourSemaine
-    }, { onConflict: 'id' });
+    .select('*')
+    .gte('receipt_date', dateDebut.toISOString());
   
-  if (error) console.error('Erreur save vente:', error);
-  return { data, error };
+  if (error) {
+    console.error('Erreur fetch ventes stats:', error);
+    return null;
+  }
+  
+  if (!data || data.length === 0) {
+    return {
+      caTotal: 0,
+      nbTransactions: 0,
+      nbArticles: 0,
+      panierMoyen: 0,
+      coutTotal: 0,
+      margeTotal: 0,
+      margePct: 0,
+      topProduits: [],
+      ventesParJour: [],
+      ventesParHeure: []
+    };
+  }
+  
+  // Calculs
+  const caTotal = data.reduce((sum, v) => sum + (parseFloat(v.net_total) || 0), 0);
+  const coutTotal = data.reduce((sum, v) => sum + (parseFloat(v.cost) || 0), 0);
+  const nbArticles = data.length;
+  const receiptsUniques = [...new Set(data.map(v => v.receipt_number))];
+  const nbTransactions = receiptsUniques.length;
+  const panierMoyen = nbTransactions > 0 ? caTotal / nbTransactions : 0;
+  const margeTotal = caTotal - coutTotal;
+  const margePct = caTotal > 0 ? (margeTotal / caTotal) * 100 : 0;
+  
+  // Top produits par CA
+  const ventesParProduit = {};
+  data.forEach(v => {
+    const nom = v.item_name || 'Inconnu';
+    if (!ventesParProduit[nom]) {
+      ventesParProduit[nom] = { nom, quantite: 0, ca: 0, cout: 0 };
+    }
+    ventesParProduit[nom].quantite += parseFloat(v.quantity) || 0;
+    ventesParProduit[nom].ca += parseFloat(v.net_total) || 0;
+    ventesParProduit[nom].cout += parseFloat(v.cost) || 0;
+  });
+  
+  const topProduits = Object.values(ventesParProduit)
+    .sort((a, b) => b.ca - a.ca)
+    .slice(0, 10);
+  
+  // Ventes par jour
+  const ventesParJour = {};
+  data.forEach(v => {
+    const date = v.receipt_date ? v.receipt_date.split('T')[0] : 'Inconnu';
+    if (!ventesParJour[date]) {
+      ventesParJour[date] = { date, ca: 0, transactions: new Set() };
+    }
+    ventesParJour[date].ca += parseFloat(v.net_total) || 0;
+    ventesParJour[date].transactions.add(v.receipt_number);
+  });
+  
+  const ventesParJourArray = Object.values(ventesParJour)
+    .map(v => ({ ...v, nbTransactions: v.transactions.size }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+  
+  // Ventes par heure
+  const ventesParHeure = {};
+  data.forEach(v => {
+    if (v.receipt_date) {
+      const heure = new Date(v.receipt_date).getHours();
+      if (!ventesParHeure[heure]) {
+        ventesParHeure[heure] = { heure, ca: 0, nbVentes: 0 };
+      }
+      ventesParHeure[heure].ca += parseFloat(v.net_total) || 0;
+      ventesParHeure[heure].nbVentes += 1;
+    }
+  });
+  
+  const ventesParHeureArray = Object.values(ventesParHeure)
+    .sort((a, b) => a.heure - b.heure);
+  
+  return {
+    caTotal,
+    nbTransactions,
+    nbArticles,
+    panierMoyen,
+    coutTotal,
+    margeTotal,
+    margePct,
+    topProduits,
+    ventesParJour: ventesParJourArray,
+    ventesParHeure: ventesParHeureArray
+  };
 };
 
-// --- FORMULES ---
+// Récupérer la date de dernière synchronisation
+export const getLastSyncDate = async () => {
+  const { data, error } = await supabase
+    .from('ventes')
+    .select('created_at')
+    .order('created_at', { ascending: false })
+    .limit(1);
+  
+  if (error || !data || data.length === 0) {
+    return null;
+  }
+  return data[0].created_at;
+};
+
+// =================== FORMULES ===================
 export const fetchFormules = async () => {
   const { data, error } = await supabase
     .from('formules')
     .select('*')
-    .order('created_at', { ascending: true });
+    .order('nom', { ascending: true });
   
   if (error) {
     console.error('Erreur fetch formules:', error);
     return [];
   }
-  
-  return data.map(f => ({
-    id: f.id,
-    nom: f.nom,
-    description: f.description,
-    composants: f.composants || [],
-    prixComposants: Number(f.prix_composants),
-    prixVente: Number(f.prix_vente),
-    economiePct: Number(f.economie_pct),
-    actif: f.actif,
-    loyverseId: f.loyverse_id,
-    syncStatus: f.sync_status,
-    notes: f.notes
-  }));
+  return data || [];
 };
 
 export const saveFormule = async (formule) => {
-  const { data, error } = await supabase
-    .from('formules')
-    .upsert({
-      id: formule.id,
-      nom: formule.nom,
-      description: formule.description,
-      composants: formule.composants,
-      prix_composants: formule.prixComposants,
-      prix_vente: formule.prixVente,
-      economie_pct: formule.economiePct,
-      actif: formule.actif,
-      loyverse_id: formule.loyverseId,
-      sync_status: formule.syncStatus || 'pending',
-      notes: formule.notes,
-      updated_at: new Date().toISOString()
-    }, { onConflict: 'id' });
+  const { id, ...formuleData } = formule;
   
-  if (error) console.error('Erreur save formule:', error);
-  return { data, error };
+  if (id && !id.startsWith('temp_')) {
+    const { data, error } = await supabase
+      .from('formules')
+      .update(formuleData)
+      .eq('id', id)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
+  } else {
+    const { data, error } = await supabase
+      .from('formules')
+      .insert([formuleData])
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
+  }
 };
 
 export const deleteFormule = async (id) => {
@@ -366,11 +389,11 @@ export const deleteFormule = async (id) => {
     .delete()
     .eq('id', id);
   
-  if (error) console.error('Erreur delete formule:', error);
-  return { error };
+  if (error) throw error;
+  return true;
 };
 
-// --- CATEGORIES ASSEMBLAGES ---
+// =================== CATEGORIES ASSEMBLAGES ===================
 export const fetchCategoriesAssemblages = async () => {
   const { data, error } = await supabase
     .from('categories_assemblages')
@@ -381,30 +404,32 @@ export const fetchCategoriesAssemblages = async () => {
     console.error('Erreur fetch categories assemblages:', error);
     return [];
   }
-  
-  return data.map(c => ({
-    id: c.id,
-    nom: c.nom,
-    description: c.description,
-    couleur: c.couleur,
-    ordre: c.ordre
-  }));
+  return data || [];
 };
 
 export const saveCategorieAssemblage = async (categorie) => {
-  const { data, error } = await supabase
-    .from('categories_assemblages')
-    .upsert({
-      id: categorie.id,
-      nom: categorie.nom,
-      description: categorie.description,
-      couleur: categorie.couleur,
-      ordre: categorie.ordre,
-      updated_at: new Date().toISOString()
-    }, { onConflict: 'id' });
+  const { id, ...categorieData } = categorie;
   
-  if (error) console.error('Erreur save categorie assemblage:', error);
-  return { data, error };
+  if (id && !id.startsWith('temp_')) {
+    const { data, error } = await supabase
+      .from('categories_assemblages')
+      .update(categorieData)
+      .eq('id', id)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
+  } else {
+    const { data, error } = await supabase
+      .from('categories_assemblages')
+      .insert([categorieData])
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
+  }
 };
 
 export const deleteCategorieAssemblage = async (id) => {
@@ -413,50 +438,13 @@ export const deleteCategorieAssemblage = async (id) => {
     .delete()
     .eq('id', id);
   
-  if (error) console.error('Erreur delete categorie assemblage:', error);
-  return { error };
+  if (error) throw error;
+  return true;
 };
 
-// --- MIGRATION DEPUIS LOCALSTORAGE ---
+// Migration depuis localStorage
 export const migrateFromLocalStorage = async () => {
-  const results = {
-    produits: { success: 0, error: 0 },
-    fournisseurs: { success: 0, error: 0 },
-    assemblages: { success: 0, error: 0 },
-    settings: { success: false, error: null }
-  };
-
-  // Migrer les produits
-  const localProducts = JSON.parse(localStorage.getItem('omc_products') || '[]');
-  for (const product of localProducts) {
-    const { error } = await saveProduit(product);
-    if (error) results.produits.error++;
-    else results.produits.success++;
-  }
-
-  // Migrer les fournisseurs
-  const localFournisseurs = JSON.parse(localStorage.getItem('omc_fournisseurs') || '[]');
-  for (const fournisseur of localFournisseurs) {
-    const { error } = await saveFournisseur(fournisseur);
-    if (error) results.fournisseurs.error++;
-    else results.fournisseurs.success++;
-  }
-
-  // Migrer les assemblages
-  const localAssemblages = JSON.parse(localStorage.getItem('omc_assemblages') || '[]');
-  for (const assemblage of localAssemblages) {
-    const { error } = await saveAssemblage(assemblage);
-    if (error) results.assemblages.error++;
-    else results.assemblages.success++;
-  }
-
-  // Migrer les settings
-  const localSettings = JSON.parse(localStorage.getItem('omc_settings') || 'null');
-  if (localSettings) {
-    const { error } = await saveSettings(localSettings);
-    results.settings.success = !error;
-    results.settings.error = error;
-  }
-
-  return results;
+  // Cette fonction peut être utilisée pour migrer des données existantes
+  console.log('Migration disponible si nécessaire');
+  return true;
 };

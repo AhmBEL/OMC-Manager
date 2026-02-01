@@ -48,6 +48,13 @@ export default function HomePage({
   // Couleur du score de santé
   const couleurSante = stats.scoreSante >= 80 ? 'emerald' : stats.scoreSante >= 50 ? 'amber' : 'red';
 
+  // Formater la date de dernière sync
+  const formatLastSync = (date) => {
+    if (!date) return null;
+    const d = new Date(date);
+    return `${d.toLocaleDateString('fr-FR')} à ${d.toLocaleTimeString('fr-FR', {hour: '2-digit', minute: '2-digit'})}`;
+  };
+
   return (
     <div className="space-y-8">
       {/* Section Bienvenue */}
@@ -214,10 +221,18 @@ export default function HomePage({
           
           {/* Score circulaire */}
           <div className="flex flex-col items-center mb-4">
-            <div className={`w-24 h-24 rounded-full bg-gradient-to-br from-${couleurSante}-400 to-${couleurSante}-600 flex items-center justify-center shadow-lg`}>
+            <div className={`w-24 h-24 rounded-full flex items-center justify-center shadow-lg ${
+              couleurSante === 'emerald' ? 'bg-gradient-to-br from-emerald-400 to-emerald-600' :
+              couleurSante === 'amber' ? 'bg-gradient-to-br from-amber-400 to-amber-600' :
+              'bg-gradient-to-br from-red-400 to-red-600'
+            }`}>
               <span className="text-3xl font-bold text-white">{stats.scoreSante}%</span>
             </div>
-            <p className={`mt-2 font-medium text-${couleurSante}-600`}>
+            <p className={`mt-2 font-medium ${
+              couleurSante === 'emerald' ? 'text-emerald-600' :
+              couleurSante === 'amber' ? 'text-amber-600' :
+              'text-red-600'
+            }`}>
               {stats.scoreSante >= 80 ? '✨ Excellent' : stats.scoreSante >= 50 ? '⚠️ À surveiller' : '🚨 Attention'}
             </p>
           </div>
@@ -269,28 +284,24 @@ export default function HomePage({
               <h3 className="font-semibold text-stone-800">Synchronisation Loyverse</h3>
               <p className="text-sm text-stone-500">
                 {lastSync 
-                  ? `Dernière sync : ${new Date(lastSync).toLocaleDateString('fr-FR')} à ${new Date(lastSync).toLocaleTimeString('fr-FR', {hour: '2-digit', minute: '2-digit'})}`
-                  : 'Non configuré - Connectez Loyverse pour synchroniser vos ventes'
+                  ? `Dernière sync : ${formatLastSync(lastSync)}`
+                  : 'Connecté via Make.com • Sync automatique toutes les 2h'
                 }
               </p>
             </div>
           </div>
           
           <div className="flex gap-3">
-            {lastSync ? (
-              <button className="px-5 py-2.5 bg-blue-500 text-white rounded-lg font-medium hover:bg-blue-600 transition-colors shadow-sm">
-                🔄 Sync maintenant
-              </button>
-            ) : (
-              <button className="px-5 py-2.5 bg-blue-500 text-white rounded-lg font-medium hover:bg-blue-600 transition-colors shadow-sm">
-                🔧 Configurer
-              </button>
-            )}
+            <button 
+              onClick={() => setPage('dashboard-perf')}
+              className="px-5 py-2.5 bg-blue-500 text-white rounded-lg font-medium hover:bg-blue-600 transition-colors shadow-sm">
+              📈 Voir les ventes
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Conseils du jour (optionnel) */}
+      {/* Conseils du jour */}
       <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl p-5 border border-amber-200">
         <div className="flex items-start gap-3">
           <span className="text-2xl">💡</span>
@@ -301,7 +312,7 @@ export default function HomePage({
                 ? "Utilisez le mode Admin pour accéder à toutes les fonctionnalités de gestion."
                 : viewMode === 'manager'
                 ? "Consultez le Dashboard Performance pour suivre vos KPI en temps réel."
-                : "Pensez à vérifier régulièrement la Santé BDD pour maintenir la cohérence de vos données."
+                : "Vos ventes Loyverse sont synchronisées automatiquement. Consultez le Dashboard Performance pour l'analyse ! 📊"
               }
             </p>
           </div>
