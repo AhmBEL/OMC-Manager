@@ -13,6 +13,10 @@ import {
   fetchFormules, saveFormule, deleteFormule,
   fetchCategoriesAssemblages, saveCategorieAssemblage, deleteCategorieAssemblage,
   migrateFromLocalStorage
+  import {
+  // ... imports existants ...
+  fetchVentesStats,
+  getLastSyncDate,
 } from './supabaseClient';
 
 // === DONNÉES INITIALES ===
